@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VidzAI - AI Video Generator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#10111b;color:white}
+header{padding:22px;text-align:center;background:#191a29}
+header h1{margin:0;color:#a99aff}
+main{max-width:650px;margin:25px auto;padding:18px}
+.card{background:#1b1d2c;padding:22px;border-radius:18px}
+label{display:block;margin:18px 0 8px}
+textarea,select,input{width:100%;padding:13px;border-radius:9px;border:1px solid #45465b;background:#10111b;color:white;font-size:16px}
+textarea{min-height:125px;resize:vertical}
+button{width:100%;padding:15px;margin-top:18px;border:0;border-radius:10px;background:#8d72ff;color:white;font-size:17px;font-weight:bold}
+button:disabled{opacity:.5}
+#message{margin-top:18px;line-height:1.5;overflow-wrap:anywhere}
+video{width:100%;margin-top:18px;border-radius:12px}
+.small{color:#b8b8ca;font-size:13px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+<h1>🎬 VidzAI</h1>
+<p>Turn your imagination into video</p>
+</header>
+<main>
+<div class="card">
+<h2>Create your AI video</h2>
+<label for="prompt">Describe your video</label>
+<textarea id="prompt" placeholder="Example: A cinematic view of a futuristic city at night, glowing lights, realistic details..."></textarea>
+<label for="ratio">Video format</label>
+<select id="ratio">
+<option value="9:16">Vertical — TikTok / Reels</option>
+<option value="16:9">Landscape — YouTube</option>
+<option value="1:1">Square</option>
+</select>
+<label for="duration">Video duration</label>
+<select id="duration">
+<option value="5">5 seconds</option>
+<option value="10">10 seconds</option>
+</select>
+<button id="generate">Generate video</button>
+<div id="message"></div>
+<video id="video" controls playsinline hidden></video>
+<p class="small">Video generation requires a valid Runway API key and may use paid credits. Never enter your API key on this page.</p>
+</div>
+</main>
+<script>
+const button=document.getElementById('generate');
+const message=document.getElementById('message');
+const video=document.getElementById('video');
+
+button.addEventListener('click',async()=>{
+ const prompt=document.getElementById('prompt').value.trim();
+ if(!prompt){message.textContent='Please describe your video first.';return}
+ button.disabled=true;
+ video.hidden=true;
+ message.textContent='Submitting your request...';
+ try{
+  const response=await fetch('/api/generate',{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({
+    prompt,
+    ratio:document.getElementById('ratio').value,
+    duration:Number(document.getElementById('duration').value)
+   })
+  });
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'Could not start generation.');
+  if(!data.id)throw new Error('No task ID was returned.');
+  message.textContent='Video is generating. Please wait...';
+  for(let i=0;i<60;i++){
+   await new Promise(resolve=>setTimeout(resolve,5000));
+   const check=await fetch('/api/status?id='+encodeURIComponent(data.id));
+   const status=await check.json();
+   if(!check.ok)throw new Error(status.error||'Could not check progress.');
+   if(status.status==='SUCCEEDED'&&status.url){
+    video.src=status.url;
+    video.hidden=false;
+    message.textContent='Your video is ready!';
+    return;
+   }
+   if(status.status==='FAILED'){
+    throw new Error('Video generation failed. Try another prompt.');
+   }
+   message.textContent='Generating video... ('+(i+1)+' checks)';
+  }
+  message.textContent='Generation is taking longer than expected. Please try checking again later.';
+ }catch(error){
+  message.textContent='Error: '+error.message;
+ }finally{
+  button.disabled=false;
+ }
+});
+</script>
+</body>
+</html>
